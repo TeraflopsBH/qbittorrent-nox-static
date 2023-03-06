@@ -607,8 +607,9 @@ set_module_urls() {
 	iconv_github_tag="$(git_git ls-remote -q -t --refs https://git.savannah.gnu.org/git/libiconv.git | awk '{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
 	iconv_url="https://ftp.gnu.org/gnu/libiconv/$(grep -Eo 'libiconv-([0-9]{1,3}[.]?)([0-9]{1,3}[.]?)([0-9]{1,3}?)\.tar.gz' <(curl https://ftp.gnu.org/gnu/libiconv/) | sort -V | tail -1)"
 
-	icu_github_tag="$(git_git ls-remote -q -t --refs https://github.com/unicode-org/icu.git | awk '/\/release-/{sub("refs/tags/release-", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
-	icu_url="https://github.com/unicode-org/icu/releases/download/release-${icu_github_tag}/icu4c-${icu_github_tag/-/_}-src.tgz"
+	icu_github_tag="$(git_git ls-remote -q -t --refs https://github.com/unicode-org/icu.git | awk '/\/release-/{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
+	icu_url_version="${icu_github_tag/release-/}"
+	icu_url="https://github.com/unicode-org/icu/releases/download/release-${icu_github_tag}/icu4c-${icu_url_version/-/_}-src.tgz"
 
 	double_conversion_github_tag="$(git_git ls-remote -q -t --refs https://github.com/google/double-conversion.git | awk '/v/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
 	double_conversion_version="${double_conversion_github_tag}"
@@ -2029,6 +2030,8 @@ if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 
 	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
 		download_folder "${app_name}" "${!app_github_url}"
+		./gitsub.sh pull --depth 1
+		./autogen.sh
 	else
 		download_file "${app_name}" "${!app_url}"
 	fi
@@ -2056,7 +2059,7 @@ if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_reset
 
 	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
-		download_folder "${app_name}" "${!app_github_url}" "/source"
+		download_folder "${app_name}" "${!app_github_url}" "/icu4c/source"
 	else
 		download_file "${app_name}" "${!app_url}" "/source"
 	fi

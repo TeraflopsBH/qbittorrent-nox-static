@@ -6,6 +6,8 @@ v1.0.6 - 07-03-2023
 
 	The lowercase naming convention of the applications must be used in the cache_path/folder_name like cache_path/qbittorrent
 
+	It must be a git repo
+
 v1.0.5 - 06-03-2023
 
 	Modified the default behaviour of the Debian installation to not build gawk and bison by default. It will now install them via apt-get.
