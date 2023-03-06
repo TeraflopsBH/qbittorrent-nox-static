@@ -21,7 +21,7 @@
 #################################################################################################################################################
 # Script version = Major minor patch
 #################################################################################################################################################
-script_version="1.0.5"
+script_version="1.0.6"
 #################################################################################################################################################
 # Set some script features - https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
 #################################################################################################################################################
@@ -103,6 +103,7 @@ set_default_values() {
 	qbt_revision_url="${qbt_revision_url:-userdocs/qbittorrent-nox-static}" # The workflow will set this dynamically so that the urls are not hardcoded to a single repo
 	qbt_workflow_type="${qbt_workflow_type:-standard}"                      # Build revisions - standard increments the revision version automatically in the script on build - The legacy workflow disables this and it is incremented by the workflow instead.
 	qbt_debian_mode="${qbt_debian_mode:-standard}"                          # In standard mode gawk and bison are installed via apt-get as system dependencies. In alternate mode they are built from source.
+	qbt_cache_dir="${qbt_cache_dir%/}"                                      # Provide a path to check for cached local git repos and use those instead. Priority over worflow files.
 
 	_print_env() {
 		printf '\n%b\n\n' " ${uyc} Default env settings${cend}"
@@ -113,6 +114,7 @@ set_default_values() {
 		printf '%b\n' " ${cly}  qbt_patches_url=\"${clg}${qbt_patches_url}${cly}\"${cend}"
 		printf '%b\n' " ${cly}  qbt_workflow_files=\"${clg}${qbt_workflow_files}${cly}\"${cend}"
 		printf '%b\n' " ${cly}  qbt_debian_mode=\"${clg}${qbt_debian_mode}${cly}\"${cend}"
+		printf '%b\n' " ${cly}  qbt_cache_dir=\"${clg}${qbt_cache_dir}${cly}\"${cend}"
 		printf '%b\n' " ${cly}  qbt_libtorrent_master_jamfile=\"${clg}${qbt_libtorrent_master_jamfile}${cly}\"${cend}"
 		printf '%b\n' " ${cly}  qbt_optimise_strip=\"${clg}${qbt_optimise_strip}${cly}\"${cend}"
 		printf '%b\n\n' " ${cly}  qbt_build_debug=\"${clg}${qbt_build_debug}${cly}\"${cend}"
@@ -333,6 +335,10 @@ while (("${#}")); do
 			qbt_build_tool="cmake"
 			shift
 			;;
+		-cd | --cache-directory)
+			qbt_cache_dir="${2%/}"
+			shift 2
+			;;
 		-d | --debug)
 			qbt_build_debug='yes'
 			shift
@@ -386,6 +392,14 @@ while (("${#}")); do
 			echo
 			echo -e " Example: ${clb}-bv 1.76.0${cend}"
 			echo
+			exit
+			;;
+		-h-cd | --help-cache-directory)
+			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
+			printf '\n%b\n' " This will let you set a path of a directory that contains cached github repos of modules"
+			printf '\n%b\n' " ${uyc} Cached apps folder names must match the module name. Case and spelling"
+			printf '\n%b\n' "   For example: ${clc}~/cache_dir/qbittorrent${cend}"
+			printf '\n%b\n\n' " Example: ${clb}-cd ~/cache_dir${cend}"
 			exit
 			;;
 		-h-dma | --help-debian-mode-alternate)
@@ -575,8 +589,10 @@ set_module_urls() {
 			# glibc_version="$(git_git ls-remote -q -t --refs https://sourceware.org/git/glibc.git | awk '/\/tags\/glibc-[0-9]\.[0-9]{2}$/{sub("refs/tags/glibc-", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
 			# glibc_url="https://ftp.gnu.org/gnu/libc/glibc-${glibc_version}.tar.gz"
 			# glibc_url="https://ftp.gnu.org/gnu/glibc/$(grep -Eo 'glibc-([0-9]{1,3}[.]?)([0-9]{1,3}[.]?)([0-9]{1,3}?)\.tar.gz' <(curl https://ftp.gnu.org/gnu/glibc/) | sort -V | tail -1)"
+			glibc_github_tag="glibc-2.37"
 			glibc_url="https://ftp.gnu.org/gnu/libc/glibc-2.37.tar.gz" # pin to the same version for this OS otherwise we get build errors
 		else
+			glibc_github_tag="glibc-2.31"
 			glibc_url="https://ftp.gnu.org/gnu/libc/glibc-2.31.tar.gz" # pin to the same version for this OS otherwise we get build errors
 		fi
 	fi
@@ -588,7 +604,7 @@ set_module_urls() {
 
 	# zlib_github_tag="$(git_git ls-remote -q -t --refs https://github.com/madler/zlib.git | awk '{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
 	# zlib_url="https://github.com/madler/zlib/archive/${zlib_github_tag}.tar.gz"
-
+	iconv_github_tag="$(git_git ls-remote -q -t --refs https://git.savannah.gnu.org/git/libiconv.git | awk '{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
 	iconv_url="https://ftp.gnu.org/gnu/libiconv/$(grep -Eo 'libiconv-([0-9]{1,3}[.]?)([0-9]{1,3}[.]?)([0-9]{1,3}?)\.tar.gz' <(curl https://ftp.gnu.org/gnu/libiconv/) | sort -V | tail -1)"
 
 	icu_github_tag="$(git_git ls-remote -q -t --refs https://github.com/unicode-org/icu.git | awk '/\/release-/{sub("refs/tags/release-", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
@@ -651,7 +667,7 @@ set_module_urls() {
 	qbt_workflow_files_gawk="https://github.com/userdocs/qbt-workflow-files/releases/latest/download/gawk.tar.xz"
 
 	if [[ "${what_version_codename}" =~ ^(jammy)$ ]]; then
-		qbt_workflow_files_glibc="https://github.com/userdocs/qbt-workflow-files/releases/latest/download/glibc.2.35.tar.xz"
+		qbt_workflow_files_glibc="https://github.com/userdocs/qbt-workflow-files/releases/latest/download/glibc.2.37.tar.xz"
 	else
 		qbt_workflow_files_glibc="https://github.com/userdocs/qbt-workflow-files/releases/latest/download/glibc.2.31.tar.xz"
 	fi
@@ -904,21 +920,30 @@ download_file() {
 #######################################################################################################################################################
 # This function is for downloading git releases based on their tag.
 #######################################################################################################################################################
-download_folder() {
+download_folder() { # download_folder "${app_name}" "${!app_github_url}"
 	if [[ -n "${1}" ]]; then
 		github_tag="${1}_github_tag"
-		url_github="${2}"
+		github_url="${2}"
 		[[ -n "${3}" ]] && subdir="/${3}" || subdir=""
-		echo -e "${tn} ${uplus}${cg} Installing ${1}${cend} - ${cly}${2}${cend} using tag${cly} ${!github_tag}${cend}${tn}"
 		folder_name="${qbt_install_dir}/${1}"
 		folder_inc="${qbt_install_dir}/include/${1}"
+
+		if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${1}" ]]; then
+			github_url="file://${qbt_cache_dir}/${1}"
+		fi
+
 		[[ -d "${folder_name}" ]] && rm -rf "${folder_name}"
 		[[ "${1}" == 'libtorrent' && -d "${folder_inc}" ]] && rm -rf "${folder_inc}"
 		git config --global advice.detachedHead false
-		_cmd git clone --no-tags --single-branch --branch "${!github_tag}" --shallow-submodules --recurse-submodules -j"$(nproc)" --depth 1 "${url_github}" "${folder_name}"
+
+		printf "%b\n" "${tn} ${uplus}${cg} Installing ${1}${cend} - ${cly}${github_url}${cend} using tag${cly} ${!github_tag}${cend}${tn}"
+		echo "${github_url}" > "${qbt_install_dir}/logs/${1}_github_url.log"
+
+		_cmd git clone --no-tags --single-branch --branch "${!github_tag}" --shallow-submodules --recurse-submodules -j"$(nproc)" --depth 1 "${github_url}" "${folder_name}"
 		mkdir -p "${folder_name}${subdir}"
 		[[ -d "${folder_name}${subdir}" ]] && _cd "${folder_name}${subdir}"
-		echo "${2}" > "${qbt_install_dir}/logs/${1}_github_url.log"
+		[[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${1}" ]] && git checkout "${!github_tag}"
+
 	else
 		echo
 		echo "You must provide a tag name for the function - download_folder"
@@ -1476,64 +1501,64 @@ while (("${#}")); do
 			shift 2
 			;;
 		-h | --help)
-			echo
-			echo -e " ${tb}${tu}Here are a list of available options${cend}"
-			echo
-			echo -e " ${cg}Use:${cend} ${clb}-b${cend}     ${td}or${cend} ${clb}--build-directory${cend}       ${cy}Help:${cend} ${clb}-h-b${cend}     ${td}or${cend} ${clb}--help-build-directory${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bv${cend}    ${td}or${cend} ${clb}--boost-version${cend}         ${cy}Help:${cend} ${clb}-h-bv${cend}    ${td}or${cend} ${clb}--help-boost-version${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-c${cend}     ${td}or${cend} ${clb}--cmake${cend}                 ${cy}Help:${cend} ${clb}-h-c${cend}     ${td}or${cend} ${clb}--help-cmake${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-d${cend}     ${td}or${cend} ${clb}--debug${cend}                 ${cy}Help:${cend} ${clb}-h-d${cend}     ${td}or${cend} ${clb}--help-debug${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-dma${cend}   ${td}or${cend} ${clb}--debian-mode-alternate${cend} ${cy}Help:${cend} ${clb}-h-dma${cend}   ${td}or${cend} ${clb}--help-debian-mode-alternate${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bs${cend}    ${td}or${cend} ${clb}--boot-strap${cend}            ${cy}Help:${cend} ${clb}-h-bs${cend}    ${td}or${cend} ${clb}--help-boot-strap${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bs-c${cend}  ${td}or${cend} ${clb}--boot-strap-cmake${cend}      ${cy}Help:${cend} ${clb}-h-bs-c${cend}  ${td}or${cend} ${clb}--help-boot-strap-cmake${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bs-r${cend}  ${td}or${cend} ${clb}--boot-strap-release${cend}    ${cy}Help:${cend} ${clb}-h-bs-r${cend}  ${td}or${cend} ${clb}--help-boot-strap-release${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bs-ma${cend} ${td}or${cend} ${clb}--boot-strap-multi-arch${cend} ${cy}Help:${cend} ${clb}-h-bs-ma${cend} ${td}or${cend} ${clb}--help-boot-strap-multi-arch${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-bs-a${cend}  ${td}or${cend} ${clb}--boot-strap-all${cend}        ${cy}Help:${cend} ${clb}-h-bs-a${cend}  ${td}or${cend} ${clb}--help-boot-strap-all${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-i${cend}     ${td}or${cend} ${clb}--icu${cend}                   ${cy}Help:${cend} ${clb}-h-i${cend}     ${td}or${cend} ${clb}--help-icu${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-lm${cend}    ${td}or${cend} ${clb}--libtorrent-master${cend}     ${cy}Help:${cend} ${clb}-h-lm${cend}    ${td}or${cend} ${clb}--help-libtorrent-master${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-lt${cend}    ${td}or${cend} ${clb}--libtorrent-tag${cend}        ${cy}Help:${cend} ${clb}-h-lt${cend}    ${td}or${cend} ${clb}--help-libtorrent-tag${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-m${cend}     ${td}or${cend} ${clb}--master${cend}                ${cy}Help:${cend} ${clb}-h-m${cend}     ${td}or${cend} ${clb}--help-master${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-ma${cend}    ${td}or${cend} ${clb}--multi-arch${cend}            ${cy}Help:${cend} ${clb}-h-ma${cend}    ${td}or${cend} ${clb}--help-multi-arch${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-n${cend}     ${td}or${cend} ${clb}--no-delete${cend}             ${cy}Help:${cend} ${clb}-h-n${cend}     ${td}or${cend} ${clb}--help-no-delete${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-o${cend}     ${td}or${cend} ${clb}--optimize${cend}              ${cy}Help:${cend} ${clb}-h-o${cend}     ${td}or${cend} ${clb}--help-optimize${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-p${cend}     ${td}or${cend} ${clb}--proxy${cend}                 ${cy}Help:${cend} ${clb}-h-p${cend}     ${td}or${cend} ${clb}--help-proxy${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-pr${cend}    ${td}or${cend} ${clb}--patch-repo${cend}            ${cy}Help:${cend} ${clb}-h-pr${cend}    ${td}or${cend} ${clb}--help-patch-repo${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-qm${cend}    ${td}or${cend} ${clb}--qbittorrent-master${cend}    ${cy}Help:${cend} ${clb}-h-qm${cend}    ${td}or${cend} ${clb}--help-qbittorrent-master${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-qt${cend}    ${td}or${cend} ${clb}--qbittorrent-tag${cend}       ${cy}Help:${cend} ${clb}-h-qt${cend}    ${td}or${cend} ${clb}--help-qbittorrent-tag${cend}"
-			echo -e " ${cg}Use:${cend} ${clb}-s${cend}     ${td}or${cend} ${clb}--strip${cend}                 ${cy}Help:${cend} ${clb}-h-s${cend}     ${td}or${cend} ${clb}--help-strip${cend}"
-			echo
-			echo -e " ${tb}${tu}Module specific help - flags are used with the modules listed here.${cend}"
-			echo
-			echo -e " ${cg}Use:${cend} ${clm}all${cend} ${td}or${cend} ${clm}module-name${cend}          ${cg}Usage:${cend} ${clc}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${clm}all${cend} ${clb}-i${cend}"
-			echo
-			echo -e " ${td}${clm}all${cend} ${td}----------------${cend} ${td}${cly}optional${cend} ${td}Recommended method to install all modules${cend}"
-			echo -e " ${td}${clm}install${cend} ${td}------------${cend} ${td}${cly}optional${cend} ${td}Install the ${td}${clc}${qbt_install_dir_short}/completed/qbittorrent-nox${cend} ${td}binary${cend}"
-			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && echo -e "${td} ${clm}bison${cend} ${td}--------------${cend} ${td}${cly}optional${cend} ${td}Build bison${cend}"
-			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && echo -e " ${td}${clm}gawk${cend} ${td}---------------${cend} ${td}${cly}optional${cend} ${td}Build gawk${cend}"
-			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && echo -e " ${td}${clm}glibc${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Build libc locally to statically link nss${cend}"
-			echo -e " ${td}${clm}zlib${cend} ${td}---------------${cend} ${td}${clr}required${cend} ${td}Build zlib locally${cend}"
-			echo -e " ${td}${clm}iconv${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Build iconv locally${cend}"
-			echo -e " ${td}${clm}icu${cend} ${td}----------------${cend} ${td}${cly}optional${cend} ${td}Build ICU locally${cend}"
-			echo -e " ${td}${clm}openssl${cend} ${td}------------${cend} ${td}${clr}required${cend} ${td}Build openssl locally${cend}"
-			echo -e " ${td}${clm}boost${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Download, extract and build the boost library files${cend}"
-			echo -e " ${td}${clm}libtorrent${cend} ${td}---------${cend} ${td}${clr}required${cend} ${td}Build libtorrent locally${cend}"
-			echo -e " ${td}${clm}double_conversion${cend} ${td}--${cend} ${td}${clr}required${cend} ${td}A cmakke + Qt6 build compenent on modern OS only.${cend}"
-			echo -e " ${td}${clm}qtbase${cend} ${td}-------------${cend} ${td}${clr}required${cend} ${td}Build qtbase locally${cend}"
-			echo -e " ${td}${clm}qttools${cend} ${td}------------${cend} ${td}${clr}required${cend} ${td}Build qttools locally${cend}"
-			echo -e " ${td}${clm}qbittorrent${cend} ${td}--------${cend} ${td}${clr}required${cend} ${td}Build qbittorrent locally${cend}"
-			echo
-			echo -e " ${tb}${tu}env help - supported exportable evironment variables${cend}"
-			echo
-			echo -e " ${td}${clm}export qbt_libtorrent_version=\"\"${cend} ${td}--------${cend} ${td}${clr}options${cend} ${td}1.2 - 2.0${cend}"
-			echo -e " ${td}${clm}export qbt_qt_version=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}5 - 5.15 - 6 - 6.2 - 6.3 and so on${cend}"
-			echo -e " ${td}${clm}export qbt_build_tool=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}qmake - cmake${cend}"
-			echo -e " ${td}${clm}export qbt_cross_name=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}x86_64 - aarch64 - armv7 - armhf${cend}"
-			echo -e " ${td}${clm}export qbt_patches_url=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}userdocs/qbittorrent-nox-static.${cend}"
-			echo -e " ${td}${clm}export qbt_workflow_files=\"\"${cend} ${td}------------${cend} ${td}${clr}options${cend} ${td}yes no - use qbt-workflow-files for dependencies${cend}"
-			echo -e " ${td}${clm}export qbt_debian_mode=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}standard alternate - defaults to standard${cend}"
-			echo -e " ${td}${clm}export qbt_libtorrent_master_jamfile=\"\"${cend} ${td}-${cend} ${td}${clr}options${cend} ${td}yes no - use RC branch instead of release jamfile${cend}"
-			echo -e " ${td}${clm}export qbt_optimise_strip=\"\"${cend} ${td}------------${cend} ${td}${clr}options${cend} ${td}yes no - strip binaries - cannot be used with debug${cend}"
-			echo -e " ${td}${clm}export qbt_build_debug=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}yes no - debug build - cannot be used with strip${cend}"
+			printf '\n%b\n\n' " ${tb}${tu}Here are a list of available options${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-b${cend}     ${td}or${cend} ${clb}--build-directory${cend}       ${cy}Help:${cend} ${clb}-h-b${cend}     ${td}or${cend} ${clb}--help-build-directory${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bv${cend}    ${td}or${cend} ${clb}--boost-version${cend}         ${cy}Help:${cend} ${clb}-h-bv${cend}    ${td}or${cend} ${clb}--help-boost-version${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-c${cend}     ${td}or${cend} ${clb}--cmake${cend}                 ${cy}Help:${cend} ${clb}-h-c${cend}     ${td}or${cend} ${clb}--help-cmake${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-cd${cend}    ${td}or${cend} ${clb}--cache-directory${cend}       ${cy}Help:${cend} ${clb}-h-cd${cend}    ${td}or${cend} ${clb}--help-cache-directory${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-d${cend}     ${td}or${cend} ${clb}--debug${cend}                 ${cy}Help:${cend} ${clb}-h-d${cend}     ${td}or${cend} ${clb}--help-debug${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-dma${cend}   ${td}or${cend} ${clb}--debian-mode-alternate${cend} ${cy}Help:${cend} ${clb}-h-dma${cend}   ${td}or${cend} ${clb}--help-debian-mode-alternate${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bs${cend}    ${td}or${cend} ${clb}--boot-strap${cend}            ${cy}Help:${cend} ${clb}-h-bs${cend}    ${td}or${cend} ${clb}--help-boot-strap${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bs-c${cend}  ${td}or${cend} ${clb}--boot-strap-cmake${cend}      ${cy}Help:${cend} ${clb}-h-bs-c${cend}  ${td}or${cend} ${clb}--help-boot-strap-cmake${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bs-r${cend}  ${td}or${cend} ${clb}--boot-strap-release${cend}    ${cy}Help:${cend} ${clb}-h-bs-r${cend}  ${td}or${cend} ${clb}--help-boot-strap-release${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bs-ma${cend} ${td}or${cend} ${clb}--boot-strap-multi-arch${cend} ${cy}Help:${cend} ${clb}-h-bs-ma${cend} ${td}or${cend} ${clb}--help-boot-strap-multi-arch${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-bs-a${cend}  ${td}or${cend} ${clb}--boot-strap-all${cend}        ${cy}Help:${cend} ${clb}-h-bs-a${cend}  ${td}or${cend} ${clb}--help-boot-strap-all${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-i${cend}     ${td}or${cend} ${clb}--icu${cend}                   ${cy}Help:${cend} ${clb}-h-i${cend}     ${td}or${cend} ${clb}--help-icu${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-lm${cend}    ${td}or${cend} ${clb}--libtorrent-master${cend}     ${cy}Help:${cend} ${clb}-h-lm${cend}    ${td}or${cend} ${clb}--help-libtorrent-master${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-lt${cend}    ${td}or${cend} ${clb}--libtorrent-tag${cend}        ${cy}Help:${cend} ${clb}-h-lt${cend}    ${td}or${cend} ${clb}--help-libtorrent-tag${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-m${cend}     ${td}or${cend} ${clb}--master${cend}                ${cy}Help:${cend} ${clb}-h-m${cend}     ${td}or${cend} ${clb}--help-master${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-ma${cend}    ${td}or${cend} ${clb}--multi-arch${cend}            ${cy}Help:${cend} ${clb}-h-ma${cend}    ${td}or${cend} ${clb}--help-multi-arch${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-n${cend}     ${td}or${cend} ${clb}--no-delete${cend}             ${cy}Help:${cend} ${clb}-h-n${cend}     ${td}or${cend} ${clb}--help-no-delete${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-o${cend}     ${td}or${cend} ${clb}--optimize${cend}              ${cy}Help:${cend} ${clb}-h-o${cend}     ${td}or${cend} ${clb}--help-optimize${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-p${cend}     ${td}or${cend} ${clb}--proxy${cend}                 ${cy}Help:${cend} ${clb}-h-p${cend}     ${td}or${cend} ${clb}--help-proxy${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-pr${cend}    ${td}or${cend} ${clb}--patch-repo${cend}            ${cy}Help:${cend} ${clb}-h-pr${cend}    ${td}or${cend} ${clb}--help-patch-repo${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-qm${cend}    ${td}or${cend} ${clb}--qbittorrent-master${cend}    ${cy}Help:${cend} ${clb}-h-qm${cend}    ${td}or${cend} ${clb}--help-qbittorrent-master${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-qt${cend}    ${td}or${cend} ${clb}--qbittorrent-tag${cend}       ${cy}Help:${cend} ${clb}-h-qt${cend}    ${td}or${cend} ${clb}--help-qbittorrent-tag${cend}"
+			printf '%b\n' " ${cg}Use:${cend} ${clb}-s${cend}     ${td}or${cend} ${clb}--strip${cend}                 ${cy}Help:${cend} ${clb}-h-s${cend}     ${td}or${cend} ${clb}--help-strip${cend}"
+
+			printf '\n%b\n' " ${tb}${tu}Module specific help - flags are used with the modules listed here.${cend}"
+
+			printf '\n%b\n' " ${cg}Use:${cend} ${clm}all${cend} ${td}or${cend} ${clm}module-name${cend}          ${cg}Usage:${cend} ${clc}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${clm}all${cend} ${clb}-i${cend}"
+
+			printf '\n%b\n' " ${td}${clm}all${cend} ${td}----------------${cend} ${td}${cly}optional${cend} ${td}Recommended method to install all modules${cend}"
+			printf '%b\n' " ${td}${clm}install${cend} ${td}------------${cend} ${td}${cly}optional${cend} ${td}Install the ${td}${clc}${qbt_install_dir_short}/completed/qbittorrent-nox${cend} ${td}binary${cend}"
+			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && printf '%b\n' "${td} ${clm}bison${cend} ${td}--------------${cend} ${td}${cly}optional${cend} ${td}Build bison${cend}"
+			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && printf '%b\n' " ${td}${clm}gawk${cend} ${td}---------------${cend} ${td}${cly}optional${cend} ${td}Build gawk${cend}"
+			[[ "${what_id}" =~ ^(debian|ubuntu)$ ]] && printf '%b\n' " ${td}${clm}glibc${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Build libc locally to statically link nss${cend}"
+			printf '%b\n' " ${td}${clm}zlib${cend} ${td}---------------${cend} ${td}${clr}required${cend} ${td}Build zlib locally${cend}"
+			printf '%b\n' " ${td}${clm}iconv${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Build iconv locally${cend}"
+			printf '%b\n' " ${td}${clm}icu${cend} ${td}----------------${cend} ${td}${cly}optional${cend} ${td}Build ICU locally${cend}"
+			printf '%b\n' " ${td}${clm}openssl${cend} ${td}------------${cend} ${td}${clr}required${cend} ${td}Build openssl locally${cend}"
+			printf '%b\n' " ${td}${clm}boost${cend} ${td}--------------${cend} ${td}${clr}required${cend} ${td}Download, extract and build the boost library files${cend}"
+			printf '%b\n' " ${td}${clm}libtorrent${cend} ${td}---------${cend} ${td}${clr}required${cend} ${td}Build libtorrent locally${cend}"
+			printf '%b\n' " ${td}${clm}double_conversion${cend} ${td}--${cend} ${td}${clr}required${cend} ${td}A cmakke + Qt6 build compenent on modern OS only.${cend}"
+			printf '%b\n' " ${td}${clm}qtbase${cend} ${td}-------------${cend} ${td}${clr}required${cend} ${td}Build qtbase locally${cend}"
+			printf '%b\n' " ${td}${clm}qttools${cend} ${td}------------${cend} ${td}${clr}required${cend} ${td}Build qttools locally${cend}"
+			printf '%b\n' " ${td}${clm}qbittorrent${cend} ${td}--------${cend} ${td}${clr}required${cend} ${td}Build qbittorrent locally${cend}"
+
+			printf '\n%b\n' " ${tb}${tu}env help - supported exportable evironment variables${cend}"
+
+			printf '\n%b\n' " ${td}${clm}export qbt_libtorrent_version=\"\"${cend} ${td}--------${cend} ${td}${clr}options${cend} ${td}1.2 - 2.0${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_qt_version=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}5 - 5.15 - 6 - 6.2 - 6.3 and so on${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_build_tool=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}qmake - cmake${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_cross_name=\"\"${cend} ${td}----------------${cend} ${td}${clr}options${cend} ${td}x86_64 - aarch64 - armv7 - armhf${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_patches_url=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}userdocs/qbittorrent-nox-static.${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_workflow_files=\"\"${cend} ${td}------------${cend} ${td}${clr}options${cend} ${td}yes no - use qbt-workflow-files for dependencies${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_debian_mode=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}standard alternate - defaults to standard${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_cache_dir=\"\"${cend} ${td}-----------------${cend} ${td}${clr}options${cend} ${td}path empty - provide a path to a cache directory${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_libtorrent_master_jamfile=\"\"${cend} ${td}-${cend} ${td}${clr}options${cend} ${td}yes no - use RC branch instead of release jamfile${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_optimise_strip=\"\"${cend} ${td}------------${cend} ${td}${clr}options${cend} ${td}yes no - strip binaries - cannot be used with debug${cend}"
+			printf '%b\n' " ${td}${clm}export qbt_build_debug=\"\"${cend} ${td}---------------${cend} ${td}${clr}options${cend} ${td}yes no - debug build - cannot be used with strip${cend}"
 
 			_print_env
 
@@ -1866,7 +1891,12 @@ application_name bison
 
 if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_set
-	download_file "${app_name}" "${!app_url}"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	./configure "${multi_bison[@]}" --prefix="${qbt_install_dir}" |& tee "${qbt_install_dir}/logs/${app_name}.log"
 	make -j"$(nproc)" CXXFLAGS="${CXXFLAGS}" CPPFLAGS="${CPPFLAGS}" LDFLAGS="${LDFLAGS}" |& tee -a "${qbt_install_dir}/logs/${app_name}.log"
@@ -1886,7 +1916,12 @@ application_name gawk
 
 if [[ "${!app_name_skip:-yes}" == 'no' || "$1" == "${app_name}" ]]; then
 	custom_flags_set
-	download_file "${app_name}" "${!app_url}"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	./configure "${multi_gawk[@]}" --prefix="$qbt_install_dir" |& tee "${qbt_install_dir}/logs/${app_name}.log"
 	make -j"$(nproc)" CXXFLAGS="${CXXFLAGS}" CPPFLAGS="${CPPFLAGS}" LDFLAGS="${LDFLAGS}" |& tee -a "${qbt_install_dir}/logs/${app_name}.log"
@@ -1908,7 +1943,13 @@ application_name glibc
 
 if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_reset
-	download_file "${app_name}" "${!app_url}"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+		app_dir="${qbt_install_dir}/${app_name}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	mkdir -p build
 	_cd "${app_dir}/build"
@@ -1985,7 +2026,12 @@ application_name iconv
 
 if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_reset
-	download_file "${app_name}" "${!app_url}"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	./configure "${multi_iconv[@]}" --prefix="${qbt_install_dir}" --disable-shared --enable-static CXXFLAGS="${CXXFLAGS}" CPPFLAGS="${CPPFLAGS}" LDFLAGS="${LDFLAGS}" |& tee "${qbt_install_dir}/logs/${app_name}.log"
 
@@ -2008,7 +2054,12 @@ application_name icu
 
 if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_reset
-	download_file "${app_name}" "${!app_url}" "/source"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}" "/source"
+	else
+		download_file "${app_name}" "${!app_url}" "/source"
+	fi
 
 	if [[ "${qbt_cross_name}" =~ ^(x86_64|armhf|armv7|aarch64)$ ]]; then
 		mkdir -p "${qbt_install_dir}/${app_name}/cross"
@@ -2039,7 +2090,12 @@ application_name openssl
 #
 if [[ "${!app_name_skip:-yes}" == 'no' || "${1}" == "${app_name}" ]]; then
 	custom_flags_set
-	download_file "${app_name}" "${!app_url}"
+
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	"${multi_openssl[@]}" --prefix="${qbt_install_dir}" --libdir="${lib_dir}" --openssldir="/etc/ssl" threads no-shared no-dso no-comp CXXFLAGS="${CXXFLAGS}" CPPFLAGS="${CPPFLAGS}" LDFLAGS="${LDFLAGS}" |& tee "${qbt_install_dir}/logs/${app_name}.log"
 	make -j"$(nproc)" |& tee -a "${qbt_install_dir}/logs/${app_name}.log"
@@ -2064,14 +2120,12 @@ if [[ "${!app_name_skip:-yes}" == 'no' ]] || [[ "${1}" == "${app_name}" ]]; then
 
 	[[ -d "${qbt_install_dir}/boost" ]] && delete_function "${app_name}"
 
-	if [[ "${qbt_workflow_files}" == 'yes' || "${qbt_workflow_artifacts}" == 'yes' || "${boost_url_status}" =~ (200) ]]; then
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]] || [[ "${boost_url_status}" =~ (403|404) ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	elif [[ "${qbt_workflow_files}" == 'yes' || "${qbt_workflow_artifacts}" == 'yes' || "${boost_url_status}" =~ (200) ]]; then
 		download_file "${app_name}" "${!app_url}"
 		mv -f "${qbt_install_dir}/boost_${boost_version//./_}/" "${qbt_install_dir}/boost"
 		_cd "${qbt_install_dir}/boost"
-	fi
-
-	if [[ "${boost_url_status}" =~ (403|404) ]]; then
-		download_folder "${app_name}" "${!app_github_url}"
 	fi
 
 	if [[ "${qbt_build_tool}" != 'cmake' ]]; then
@@ -2222,7 +2276,11 @@ application_name qtbase
 if [[ "${!app_name_skip:-yes}" == 'no' ]] || [[ "${1}" == "${app_name}" ]]; then
 	custom_flags_set
 
-	download_file "${app_name}" "${!app_url}"
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	case "${qbt_cross_name}" in
 		armhf | armv7)
@@ -2299,7 +2357,11 @@ application_name qttools
 if [[ "${!app_name_skip:-yes}" == 'no' ]] || [[ "${1}" == "${app_name}" ]]; then
 	custom_flags_set
 
-	download_file "${app_name}" "${!app_url}"
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]]; then
+		download_folder "${app_name}" "${!app_github_url}"
+	else
+		download_file "${app_name}" "${!app_url}"
+	fi
 
 	if [[ "${qbt_build_tool}" == 'cmake' && "${qbt_qt_version}" =~ ^6 ]]; then
 		mkdir -p "${qbt_install_dir}/graphs/${libtorrent_github_tag}"
