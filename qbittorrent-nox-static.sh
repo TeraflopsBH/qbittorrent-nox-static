@@ -673,7 +673,7 @@ set_module_urls() {
 
 	icu_github_tag="$(git_git ls-remote -q -t --refs https://github.com/unicode-org/icu.git | awk '/\/release-/{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n 1)"
 	icu_url_version="${icu_github_tag/release-/}"
-	icu_url="https://github.com/unicode-org/icu/releases/download/release-${icu_github_tag}/icu4c-${icu_url_version/-/_}-src.tgz"
+	icu_url="https://github.com/unicode-org/icu/releases/download/release-${icu_url_version}/icu4c-${icu_url_version/-/_}-src.tgz"
 
 	double_conversion_github_tag="$(git_git ls-remote -q -t --refs https://github.com/google/double-conversion.git | awk '/v/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
 	double_conversion_version="${double_conversion_github_tag}"
