@@ -6,15 +6,20 @@
 #
 # @author - userdocs
 #
-# @contributors IceCodeNew Stanislas boredazfcuk AdvenT. guillaumedsde
+# @contributors IceCodeNew Stanislas boredazfcuk AdvenT. guillaumedsde inochisa
 #
 # @credits - https://gist.github.com/notsure2 https://github.com/c0re100/qBittorrent-Enhanced-Edition
 #
-# shellcheck disable=SC2034,SC1091 # Why are these checks excluded?
+# shellcheck disable=SC2034,SC1091
+# Why are these checks excluded?
 #
-# https://github.com/koalaman/shellcheck/wiki/SC2034 There are quite a few variables defined by combining other variables that mean nothing on their own. This behavior is intentional and the warning can be skipped.
+# https://github.com/koalaman/shellcheck/wiki/SC2034
+# There are quite a few variables defined by combining other variables that mean nothing on their own.
+# This behavior is intentional and the warning can be skipped.
 #
-# https://github.com/koalaman/shellcheck/wiki/SC1091 I am sourcing /etc/os-release for some variables. It's not available to shellcheck to source and it's a safe file so we can skip this
+# https://github.com/koalaman/shellcheck/wiki/SC1091
+# I am sourcing /etc/os-release for some variables.
+# It's not available to shellcheck to source and it's a safe file so we can skip this
 #
 # Script Formatting - https://marketplace.visualstudio.com/items?itemName=foxundermoon.shell-format
 #
@@ -53,58 +58,111 @@ ucc="\e[36m\U25cf\e[0m" ulcc="\e[96m\U25cf\e[0m"    # [u]nicode[c]yan[c]ircle   
 ugrc="\e[37m\U25cf\e[0m" ulgrcc="\e[97m\U25cf\e[0m" # [u]nicode[gr]ey[c]ircle    [u]nicode[l]ight[gr]ey[c]ircle
 
 cdef="\e[39m" # [c]olor[def]ault
-bkend="\e[0m"
-cend="\e[0m" # [c]olor[end]
+cend="\e[0m"  # [c]olor[end]
 #######################################################################################################################################################
 # Check we are on a supported OS and release.
 #######################################################################################################################################################
-what_id="$(source /etc/os-release && printf "%s" "${ID}")"                             # Get the main platform name, for example: debian, ubuntu or alpine
-what_version_codename="$(source /etc/os-release && printf "%s" "${VERSION_CODENAME}")" # Get the codename for this this OS. Note, Alpine does not have a unique codename.
-what_version_id="$(source /etc/os-release && printf "%s" "${VERSION_ID%_*}")"          # Get the version number for this codename, for example: 10, 20.04, 3.12.4
+# Get the main platform name, for example: debian, ubuntu or alpine
+what_id="$(source /etc/os-release && printf "%s" "${ID}")"
+
+# Get the codename for this this OS. Note, Alpine does not have a unique codename.
+what_version_codename="$(source /etc/os-release && printf "%s" "${VERSION_CODENAME}")"
+
+# Get the version number for this codename, for example: 10, 20.04, 3.12.4
+what_version_id="$(source /etc/os-release && printf "%s" "${VERSION_ID%_*}")"
+
+# Account for varation in the versioning 3.1 or 3.1.0 to make sure the check works correctly
 [[ "$(wc -w <<< "${what_version_id//\./ }")" -eq "2" ]] && alpline_min_version="310"
 
-if [[ "${what_id}" =~ ^(alpine)$ ]]; then # If alpine, set the codename to alpine. We check for min v3.10 later with codenames.
+# If alpine, set the codename to alpine. We check for min v3.10 later with codenames.
+if [[ "${what_id}" =~ ^(alpine)$ ]]; then
 	what_version_codename="alpine"
 fi
 
 ## Check against allowed codenames or if the codename is alpine version greater than 3.10
 if [[ ! "${what_version_codename}" =~ ^(alpine|bullseye|focal|jammy)$ ]] || [[ "${what_version_codename}" =~ ^(alpine)$ && "${what_version_id//\./}" -lt "${alpline_min_version:-3100}" ]]; then
-	echo
-	echo -e " ${cly}This is not a supported OS. There is no reason to continue.${cend}"
-	echo
-	echo -e " id: ${td}${cly}${what_id}${cend} codename: ${td}${cly}${what_version_codename}${cend} version: ${td}${clr}${what_version_id}${cend}"
-	echo
-	echo -e " ${td}These are the supported platforms${cend}"
-	echo
-	echo -e " ${clm}Debian${cend} - ${clb}bullseye${cend}"
-	echo
-	echo -e " ${clm}Ubuntu${cend} - ${clb}focal${cend} - ${clb}jammy${cend}"
-	echo
-	echo -e " ${clm}Alpine${cend} - ${clb}3.10.0${cend} or greater"
-	echo
+	printf '\n%b\n\n' " ${urc} ${cy} This is not a supported OS. There is no reason to continue.${cend}"
+	printf '%b\n\n' " id: ${td}${cly}${what_id}${cend} codename: ${td}${cly}${what_version_codename}${cend} version: ${td}${clr}${what_version_id}${cend}"
+	printf '%b\n\n' " ${uyc} ${td}These are the supported platforms${cend}"
+	printf '%b\n' " ${clm}Debian${cend} - ${clb}bullseye${cend}"
+	printf '%b\n' " ${clm}Ubuntu${cend} - ${clb}focal${cend} - ${clb}jammy${cend}"
+	printf '%b\n\n' " ${clm}Alpine${cend} - ${clb}3.10.0${cend} or greater"
 	exit 1
 fi
 #######################################################################################################################################################
 # This function sets some default values we use but whose values can be overridden by certain flags or exported as variables before running the script
 #######################################################################################################################################################
 set_default_values() {
-	DEBIAN_FRONTEND="noninteractive" && TZ="Europe/London" # For docker deploys to not get prompted to set the timezone.
+	# For docker deploys to not get prompted to set the timezone.
+	DEBIAN_FRONTEND="noninteractive" && TZ="Europe/London"
 
+	# The default build configuration is qmake + qt5, qbt_build_tool=cmake or -c will make qt6 and cmake default
 	qbt_build_tool="${qbt_build_tool:-qmake}"
-	qbt_cross_name="${qbt_cross_name:-}"                                    # Default to empty to use host native build tools. This way we can build on native arch on support OS and skip crossbuild toolchains
-	qbt_cross_target="${qbt_cross_target:-${what_id}}"                      # Default to host - we are not really using this for anything other than what it defaults to so no need to set it.
-	qbt_build_debug="${qbt_build_debug:-no}"                                # yes to create debug build to use with gdb - disables stripping
-	qbt_workflow_files="${qbt_workflow_files:-no}"                          # github actions workflows - use https://github.com/userdocs/qbt-workflow-files/releases/latest instead of direct downloads from various source locations. Provides an alternative source and does not spam download hosts when building matrix builds.
-	qbt_workflow_artifacts="${qbt_workflow_artifacts:-no}"                  # github actions workflows - use the workflow files saved as artifacts instead of downloading from workflow files or host per matrix
-	qbt_patches_url="${qbt_patches_url:-userdocs/qbittorrent-nox-static}"   # Provide a git username and repo in this format - username/repo - In this repo the structure needs to be like this /patches/libtorrent/1.2.11/patch and/or /patches/qbittorrent/4.3.1/patch and your patch file will be automatically fetched and loadded for those matching tags.
-	qbt_libtorrent_version="${qbt_libtorrent_version:-2.0}"                 # Default to this version of libtorrent is no tag or branch is specificed.
-	qbt_libtorrent_master_jamfile="${qbt_libtorrent_master_jamfile:-no}"    # Use release Jamfile unless we need a specific fix from the relevant RC branch. Using this can also break builds when non backported changes are present whic will require a custom jamfile
-	qbt_optimise_strip="${qbt_optimise_strip:-no}"                          # Strip by default as we need full debug builds to be useful gdb to backtrace
-	qbt_revision_url="${qbt_revision_url:-userdocs/qbittorrent-nox-static}" # The workflow will set this dynamically so that the urls are not hardcoded to a single repo
-	qbt_workflow_type="${qbt_workflow_type:-standard}"                      # Build revisions - standard increments the revision version automatically in the script on build - The legacy workflow disables this and it is incremented by the workflow instead.
-	qbt_debian_mode="${qbt_debian_mode:-standard}"                          # In standard mode gawk and bison are installed via apt-get as system dependencies. In alternate mode they are built from source.
-	qbt_cache_dir="${qbt_cache_dir%/}"                                      # Provide a path to check for cached local git repos and use those instead. Priority over worflow files.
 
+	# Default to empty to use host native build tools. This way we can build on native arch on a supported OS and skip crossbuild toolchains
+	qbt_cross_name="${qbt_cross_name:-}"
+
+	# Default to host - we are not really using this for anything other than what it defaults to so no need to set it.
+	qbt_cross_target="${qbt_cross_target:-${what_id}}"
+
+	# yes to create debug build to use with gdb - disables stripping - for some reason liborrent b2 builds are 200MB or larger. qbt_build_debug=yes or -d
+	qbt_build_debug="${qbt_build_debug:-no}"
+
+	# github actions workflows - use https://github.com/userdocs/qbt-workflow-files/releases/latest instead of direct downloads from various source locations.
+	# Provides an alternative source and does not spam download hosts when building matrix builds.
+	qbt_workflow_files="${qbt_workflow_files:-no}"
+
+	# github actions workflows - use the workflow files saved as artifacts instead of downloading from workflow files or host per matrix
+	qbt_workflow_artifacts="${qbt_workflow_artifacts:-no}"
+
+	# Provide a git username and repo in this format - username/repo
+	# In this repo the structure needs to be like this /patches/libtorrent/1.2.11/patch and/or /patches/qbittorrent/4.3.1/patch
+	# your patch file will be automatically fetched and loadded for those matching tags.
+	qbt_patches_url="${qbt_patches_url:-userdocs/qbittorrent-nox-static}"
+
+	# Default to this version of libtorrent is no tag or branch is specificed. qbt_libtorrent_version=1.2 or -lt v1.2.18
+	qbt_libtorrent_version="${qbt_libtorrent_version:-2.0}"
+
+	# Use release Jamfile unless we need a specific fix from the relevant RC branch.
+	# Using this can also break builds when non backported changes are present which will require a custom jamfile
+	qbt_libtorrent_master_jamfile="${qbt_libtorrent_master_jamfile:-no}"
+
+	# Strip symbols by default as we need full debug builds to be useful gdb to backtrace so stripping is a sensible default optimisation.
+	qbt_optimise_strip="${qbt_optimise_strip:-no}"
+
+	# Github actions specific - Build revisions - The workflow will set this dynamically so that the urls are not hardcoded to a single repo
+	qbt_revision_url="${qbt_revision_url:-userdocs/qbittorrent-nox-static}"
+
+	# Github actions specific - Build revisions - standard increments the revision version automatically in the script on build
+	# The legacy workflow disables this and it is incremented by the workflow instead.
+	qbt_workflow_type="${qbt_workflow_type:-standard}"
+
+	# In standard mode gawk and bison are installed via apt-get as system dependencies. In alternate mode they are built from source.
+	qbt_debian_mode="${qbt_debian_mode:-standard}"
+
+	# Provide a path to check for cached local git repos and use those instead. Priority over worflow files.
+	qbt_cache_dir="${qbt_cache_dir%/}"
+
+	# We are only using python3 but it's easier to just change this if we need to for some reason.
+	qbt_python_version="3"
+
+	# Set the CXX standards used to build cxx code.
+	# ${standard} - Set the CXX standard. You may need to set c++14 for older versions of some apps, like qt 5.12
+	standard="17" && cpp_standard="c${standard}" && cxx_standard="c++${standard}"
+
+	# The Alpine repository we use for package sources
+	CDN_URL="http://dl-cdn.alpinelinux.org/alpine/edge/main" # for alpine
+
+	# Define our list of available modules in an array.
+	qbt_modules=("all" "install" "bison" "gawk" "glibc" "zlib" "iconv" "icu" "openssl" "boost" "libtorrent" "double_conversion" "qtbase" "qttools" "qbittorrent")
+
+	# Create this array empty. Modules listed in or added to this array will be removed from the default list of modules, changing the behaviour of all or install
+	delete=()
+
+	# Create this array empty. Packages listed in or added to this array will be removed from the default list of packages, changing the list of installed dependencies
+	delete_pkgs=()
+
+	# A function to print some env value of the script dynamically. Used in the help section and script output.
 	_print_env() {
 		printf '\n%b\n\n' " ${uyc} Default env settings${cend}"
 		printf '%b\n' " ${cly}  qbt_libtorrent_version=\"${clg}${qbt_libtorrent_version}${cly}\"${cend}"
@@ -120,6 +178,7 @@ set_default_values() {
 		printf '%b\n\n' " ${cly}  qbt_build_debug=\"${clg}${qbt_build_debug}${cly}\"${cend}"
 	}
 
+	# Dynamic tests to change settings based on the use of qmake,cmake,strip and debug
 	if [[ "${qbt_build_debug}" = 'yes' ]]; then
 		qbt_optimise_strip='no'
 		qbt_cmake_debug='ON'
@@ -129,6 +188,7 @@ set_default_values() {
 		qbt_cmake_debug='OFF'
 	fi
 
+	# Dynamic tests to change settings based on the use of qmake,cmake,strip and debug
 	if [[ "${qbt_optimise_strip}" = 'yes' && "${qbt_build_debug}" = 'no' ]]; then
 		qbt_strip_qmake='strip'
 		qbt_strip_flags='-s'
@@ -137,6 +197,7 @@ set_default_values() {
 		qbt_strip_flags=''
 	fi
 
+	# Dynamic tests to change settings based on the use of qmake,cmake,strip and debug
 	case "${qbt_qt_version}" in
 		5)
 			if [[ "${qbt_build_tool}" != 'cmake' ]]; then
@@ -159,18 +220,7 @@ set_default_values() {
 			;;
 	esac
 
-	qbt_python_version="3" # We are only using python3 but it's easier to just change this if we need to.
-
-	standard="17" && cpp_standard="c${standard}" && cxx_standard="c++${standard}" # ${standard} - Set the CXX standard. You may need to set c++14 for older versions of some apps, like qt 5.12
-
-	CDN_URL="http://dl-cdn.alpinelinux.org/alpine/edge/main" # for alpine
-
-	qbt_modules=("all" "install" "bison" "gawk" "glibc" "zlib" "iconv" "icu" "openssl" "boost" "libtorrent" "double_conversion" "qtbase" "qttools" "qbittorrent") # Define our list of available modules in an array.
-
-	delete=() # Create this array empty. Modules listed in or added to this array will be removed from the default list of modules, changing the behaviour of all or install
-
-	delete_pkgs=() # Create this array empty. Packages listed in or added to this array will be removed from the default list of packages, changing the list of installed dependencies
-
+	#
 	if [[ ${qbt_cross_name} =~ ^(x86_64|armhf|armv7|aarch64)$ ]]; then
 		_multi_arch bootstrap
 	else
@@ -178,24 +228,29 @@ set_default_values() {
 		delete_pkgs+=("crossbuild-essential-${cross_arch}")
 	fi
 
-	if [[ "${what_id}" =~ ^(alpine)$ ]]; then # if Alpine then delete modules we don't use and set the required packages array
+	# if Alpine then delete modules we don't use and set the required packages array
+	if [[ "${what_id}" =~ ^(alpine)$ ]]; then
 		delete+=("bison" "gawk" "glibc")
 		qbt_required_pkgs=("bash" "bash-completion" "build-base" "curl" "pkgconf" "autoconf" "automake" "libtool" "git" "perl" "python${qbt_python_version}" "python${qbt_python_version}-dev" "py${qbt_python_version}-numpy" "py${qbt_python_version}-numpy-dev" "linux-headers" "ttf-freefont" "graphviz" "cmake" "re2c")
 	fi
 
-	if [[ "${what_id}" =~ ^(debian|ubuntu)$ ]]; then # if debian based then set the required packages array
+	# if debian based then set the required packages array
+	if [[ "${what_id}" =~ ^(debian|ubuntu)$ ]]; then
 		[[ "${qbt_debian_mode}" == 'alternate' ]] && delete_pkgs+=("gawk" "bison")
 		[[ "${qbt_debian_mode}" == 'standard' ]] && delete+=("bison" "gawk")
 		qbt_required_pkgs=("gettext" "texinfo" "gawk" "bison" "build-essential" "crossbuild-essential-${cross_arch}" "curl" "pkg-config" "automake" "libtool" "git" "openssl" "perl" "python${qbt_python_version}" "python${qbt_python_version}-dev" "python${qbt_python_version}-numpy" "unzip" "graphviz" "re2c")
 	fi
 
-	if [[ "${1}" != 'install' ]]; then # remove this module by default unless provided as a first argument to the script.
+	# remove this module by default unless provided as a first argument to the script.
+	if [[ "${1}" != 'install' ]]; then
 		delete+=("install")
 	fi
 
-	if [[ "${*}" =~ ([[:space:]]|^)"icu"([[:space:]]|$) ]]; then # Don't remove the icu module if it was provided as a positional parameter.
+	# Don't remove the icu module if it was provided as a positional parameter.
+	# else skip icu by default unless the -i flag is provided.
+	if [[ "${*}" =~ ([[:space:]]|^)"icu"([[:space:]]|$) ]]; then
 		qbt_skip_icu='no'
-	elif [[ "${qbt_skip_icu}" != 'no' ]]; then # else skip icu by default unless the -i flag is provided.
+	elif [[ "${qbt_skip_icu}" != 'no' ]]; then
 		delete+=("icu")
 	fi
 
@@ -206,19 +261,26 @@ set_default_values() {
 		[[ "${qbt_skip_icu}" != 'no' ]] && delete+=("icu")
 	fi
 
-	qbt_working_dir="$(pwd)"                            # Set the working dir to our current location and all things well be relative to this location.
-	qbt_working_dir_short="${qbt_working_dir/$HOME/\~}" # Used with echos. Use the qbt_working_dir variable but the $HOME path is replaced with a literal ~
+	# Set the working dir to our current location and all things well be relative to this location.
+	qbt_working_dir="$(pwd)"
 
-	qbt_install_dir="${qbt_working_dir}/qbt-build"      # Install relative to the script location.
-	qbt_install_dir_short="${qbt_install_dir/$HOME/\~}" # Used with echos. Use the qbt_install_dir variable but the $HOME path is replaced with a literal ~
+	# Used with echos. Use the qbt_working_dir variable but the $HOME path is replaced with a literal ~
+	qbt_working_dir_short="${qbt_working_dir/$HOME/\~}"
 
-	qbt_local_paths="$PATH" # Get the local users $PATH before we isolate the script by setting HOME to the install dir in the set_build_directory function.
+	# Install relative to the script location.
+	qbt_install_dir="${qbt_working_dir}/qbt-build"
+
+	# Used with echos. Use the qbt_install_dir variable but the $HOME path is replaced with a literal ~
+	qbt_install_dir_short="${qbt_install_dir/$HOME/\~}"
+
+	# Get the local users $PATH before we isolate the script by setting HOME to the install dir in the set_build_directory function.
+	qbt_local_paths="$PATH"
 }
 #######################################################################################################################################################
 # This function will check for a list of defined dependencies from the qbt_required_pkgs array. Apps like python3-dev are dynamically set
 #######################################################################################################################################################
 check_dependencies() {
-	echo -e "${tn} ${ulbc}${tb} Checking if required core dependencies are installed${cend}${tn}"
+	printf '\n%b\n\n' " ${ulbc} ${tb}Checking if required core dependencies are installed${cend}"
 
 	## remove packages in the delete_pkgs from the qbt_required_pkgs array
 	for target in "${delete_pkgs[@]}"; do
@@ -240,19 +302,20 @@ check_dependencies() {
 		fi
 
 		if pkgman > /dev/null 2>&1; then
-			echo -e " ${utick} ${pkg}"
+			printf '%b\n' " ${utick} ${pkg}"
 		else
 			if [[ -n "${pkg}" ]]; then
 				deps_installed='no'
-				echo -e " ${ucross} ${pkg}"
+				printf '%b\n' " ${ucross} ${pkg}"
 				qbt_checked_required_pkgs+=("$pkg")
 			fi
 		fi
 	done
 
-	if [[ "${deps_installed}" == 'no' ]]; then # Check if user is able to install the dependencies, if yes then do so, if no then exit.
+	# Check if user is able to install the dependencies, if yes then do so, if no then exit.
+	if [[ "${deps_installed}" == 'no' ]]; then
 		if [[ "$(id -un)" == 'root' ]]; then
-			echo -e "${tn} ${uplus}${cg} Updating${cend}${tn}"
+			printf '\n%b\n\n' " ${uplus} ${cg}Updating${cend}"
 
 			if [[ "${what_id}" =~ ^(alpine)$ ]]; then
 				apk update --repository="${CDN_URL}"
@@ -267,51 +330,51 @@ check_dependencies() {
 			fi
 
 			[[ -f /var/run/reboot-required ]] && {
-				echo -e "${tn}${cr} This machine requires a reboot to continue installation. Please reboot now.${cend}${tn}"
+				printf '\n%b\n\n' " ${cr}This machine requires a reboot to continue installation. Please reboot now.${cend}"
 				exit
 			}
 
-			echo -e "${tn} ${uplus}${cg} Installing required dependencies${cend}${tn}"
+			printf '\n%b\n\n' " ${uplus}${cg} Installing required dependencies${cend}"
 
 			if [[ "${what_id}" =~ ^(alpine)$ ]]; then
 				if ! apk add "${qbt_checked_required_pkgs[@]}" --repository="${CDN_URL}"; then
-					echo
+					printf '\n'
 					exit 1
 				fi
 			fi
 
 			if [[ "${what_id}" =~ ^(debian|ubuntu)$ ]]; then
 				if ! apt-get install -y "${qbt_checked_required_pkgs[@]}"; then
-					echo
+					printf '\n'
 					exit 1
 				fi
 			fi
 
-			echo -e "${tn} ${utick}${cg} Dependencies installed!${cend}"
+			printf '\n%b\n' " ${utick}${cg} Dependencies installed!${cend}"
 
 			deps_installed='yes'
 		else
-			echo -e "${tn}${tb} Please request or install the missing core dependencies before using this script${cend}"
+			printf '\n%b\n' " ${tb}Please request or install the missing core dependencies before using this script${cend}"
 
 			if [[ "${what_id}" =~ ^(alpine)$ ]]; then
-				echo -e "${tn}${clr} apk add${cend} ${qbt_checked_required_pkgs[*]}${tn}"
+				printf '\n%b\n\n' " ${clr}apk add${cend} ${qbt_checked_required_pkgs[*]}"
 			fi
 
 			if [[ "${what_id}" =~ ^(debian|ubuntu)$ ]]; then
-				echo -e "${tn}${clr} apt-get install -y${cend} ${qbt_checked_required_pkgs[*]}${tn}"
+				printf '\n%b\n\n' " ${clr}apt-get install -y${cend} ${qbt_checked_required_pkgs[*]}"
 			fi
 
 			exit
 		fi
 	fi
 
-	## All checks passed echo
+	# All checks passed echo
 	if [[ "${deps_installed}" != 'no' ]]; then
-		echo -e "${tn} ${ugc}${tb} All checks passed and core dependencies are installed, continuing to build${cend}"
+		printf '\n%b\n' " ${ugc}${tb} All checks passed and core dependencies are installed, continuing to build${cend}"
 	fi
 }
 #######################################################################################################################################################
-# 1: curl and git http/https proxy detection use -p username:pass@URL:PORT or -p URL:PORT
+# This is first help section that for triggers that do not require any processing and only provide a static result whe using help
 #######################################################################################################################################################
 while (("${#}")); do
 	case "${1}" in
@@ -449,9 +512,10 @@ while (("${#}")); do
 	esac
 done
 
-set -- "${params1[@]}" # Set positional arguments in their proper place.
+# Set positional arguments in their proper place.
+set -- "${params1[@]}"
 #######################################################################################################################################################
-# 2:  curl test download functions - default is no proxy - curl is a test function and curl_curl is the command function
+# curl test download functions - default is no proxy - curl is a test function and curl_curl is the command function
 #######################################################################################################################################################
 curl_curl() {
 	if [[ -z "${qbt_curl_proxy}" ]]; then
@@ -468,7 +532,7 @@ curl() {
 	fi
 }
 #######################################################################################################################################################
-# 3: git test download functions - default is no proxy - git is a test function and git_git is the command function
+# git test download functions - default is no proxy - git is a test function and git_git is the command function
 #######################################################################################################################################################
 git_git() {
 	if [[ -z "${qbt_git_proxy}" ]]; then
@@ -533,11 +597,11 @@ set_build_directory() {
 		fi
 	fi
 
-	## Set lib and include directory paths based on install path.
+	# Set lib and include directory paths based on install path.
 	include_dir="${qbt_install_dir}/include"
 	lib_dir="${qbt_install_dir}/lib"
 
-	## Define some build specific variables
+	# Define some build specific variables
 	LOCAL_USER_HOME="${HOME}" # Get the local user's home dir path before we contain HOME to the build dir.
 	HOME="${qbt_install_dir}"
 	PATH="${qbt_install_dir}/bin${PATH:+:${qbt_local_paths}}"
@@ -558,7 +622,7 @@ custom_flags_reset() {
 	LDFLAGS=""
 }
 #######################################################################################################################################################
-# This function is where we set your URL that we use with other functions.
+# This function is where we set your URL and github tag info that we use with other functions.
 #######################################################################################################################################################
 set_module_urls() {
 	# Update check url
@@ -708,7 +772,7 @@ _installation_modules() {
 	params_count="${#}"
 	params_test=1
 
-	## remove modules from the delete array from the qbt_modules array
+	# remove modules from the delete array from the qbt_modules array
 	for target in "${delete[@]}"; do
 		for i in "${!qbt_modules[@]}"; do
 			if [[ "${qbt_modules[i]}" == "${target}" ]]; then
@@ -734,7 +798,7 @@ _installation_modules() {
 		fi
 	fi
 
-	## Activate all validated modules for installation and define some core variables.
+	# Activate all validated modules for installation and define some core variables.
 	if [[ "${qbt_modules_test}" != 'fail' ]]; then
 		if [[ "${*}" =~ ([[:space:]]|^)"all"([[:space:]]|$) ]]; then
 			for module in "${qbt_modules[@]}"; do
@@ -746,12 +810,12 @@ _installation_modules() {
 			done
 		fi
 
-		## Create the directories we need.
+		# Create the directories we need.
 		mkdir -p "${qbt_install_dir}/logs"
 		mkdir -p "${PKG_CONFIG_PATH}"
 		mkdir -p "${qbt_install_dir}/completed"
 
-		## Set some python variables we need.
+		# Set some python variables we need.
 		python_major="$(python"${qbt_python_version}" -c "import sys; print(sys.version_info[0])")"
 		python_minor="$(python"${qbt_python_version}" -c "import sys; print(sys.version_info[1])")"
 		python_micro="$(python"${qbt_python_version}" -c "import sys; print(sys.version_info[2])")"
@@ -761,13 +825,13 @@ _installation_modules() {
 
 		echo -e "using gcc : : : <cflags>${optimize/*/$optimize }-std=${cxx_standard} <cxxflags>${optimize/*/$optimize }-std=${cxx_standard} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
 
-		## Echo the build directory.
+		# Echo the build directory.
 		echo -e "${tn} ${uyc}${tb} Install Prefix${cend} : ${clc}${qbt_install_dir_short}${cend}"
 
-		## Some basic help
+		# Some basic help
 		echo -e "${tn} ${uyc}${tb} Script help${cend} : ${clc}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${clb}-h${cend}"
 	else
-		echo -e "${tn} ${tbk}${urc}${bkend}${tb} One or more of the provided modules are not supported${cend}"
+		echo -e "${tn} ${tbk}${urc}${cend}${tb} One or more of the provided modules are not supported${cend}"
 		echo -e "${tn} ${uyc}${tb} Below is a list of supported modules${cend}"
 		echo -e "${tn} ${umc}${clm} ${qbt_modules[*]}${cend}"
 
@@ -873,14 +937,13 @@ _cd() {
 	fi
 }
 #######################################################################################################################################################
-# This function is to test a directory exists before attemtping to cd and fail with and exit code if it doesn't.
+# This function makes sure the log directory and path required exists for tee
 #######################################################################################################################################################
 tee() {
 	[[ "$#" -eq 1 && "${1%/*}" =~ / ]] && mkdir -p "${1%/*}"
 	[[ "$#" -eq 2 && "${2%/*}" =~ / ]] && mkdir -p "${2%/*}"
 	command tee "$@"
 }
-
 #######################################################################################################################################################
 # This function is for downloading source code archives
 #######################################################################################################################################################
@@ -930,17 +993,23 @@ download_folder() { # download_folder "${app_name}" "${!app_github_url}"
 		folder_inc="${qbt_install_dir}/include/${1}"
 
 		if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${1}" ]]; then
-			github_url="file://${qbt_cache_dir}/${1}"
+			github_url="${qbt_cache_dir}/${1}"
 		fi
 
 		[[ -d "${folder_name}" ]] && rm -rf "${folder_name}"
 		[[ "${1}" == 'libtorrent' && -d "${folder_inc}" ]] && rm -rf "${folder_inc}"
 		git config --global advice.detachedHead false
+		git config --global protocol.file.allow always
 
-		printf "%b\n" "${tn} ${uplus}${cg} Installing ${1}${cend} - ${cly}${github_url}${cend} using tag${cly} ${!github_tag}${cend}${tn}"
-		echo "${github_url}" > "${qbt_install_dir}/logs/${1}_github_url.log"
+		printf "\n%b\n\n" " ${uplus}${cg} Installing ${1}${cend} - ${cly}${github_url}${cend} using tag${cly} ${!github_tag}${cend}"
+		printf '%s' "${github_url}" > "${qbt_install_dir}/logs/${1}_github_url.log"
 
-		_cmd git clone --no-tags --single-branch --branch "${!github_tag}" --shallow-submodules --recurse-submodules -j"$(nproc)" --depth 1 "${github_url}" "${folder_name}"
+		if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${1}" ]]; then
+			cp -rf "${qbt_cache_dir}/${1}"/. "${folder_name}"
+		else
+			_cmd git clone --no-tags --single-branch --branch "${!github_tag}" --shallow-submodules --recurse-submodules -j"$(nproc)" --depth 1 "${github_url}" "${folder_name}"
+		fi
+
 		mkdir -p "${folder_name}${subdir}"
 		[[ -d "${folder_name}${subdir}" ]] && _cd "${folder_name}${subdir}"
 		[[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${1}" ]] && git checkout "${!github_tag}"
@@ -1007,7 +1076,7 @@ application_skip() {
 	fi
 }
 #######################################################################################################################################################
-# This function installs qt
+# This function installs a completed static build of qbittorrent-nox to the /usr/local/bin for root or ${HOME}/bin for non root
 #######################################################################################################################################################
 install_qbittorrent() {
 	if [[ -f "${qbt_install_dir}/completed/qbittorrent-nox" ]]; then
@@ -1031,7 +1100,7 @@ install_qbittorrent() {
 	fi
 }
 #######################################################################################################################################################
-# wtf is wrong now?
+# This is a command test function: _cmd exit 1
 #######################################################################################################################################################
 _cmd() {
 	if ! "${@}"; then
@@ -1040,7 +1109,7 @@ _cmd() {
 	fi
 }
 #######################################################################################################################################################
-# build command test
+# This is a command test function to test build commands for failure
 #######################################################################################################################################################
 post_command() {
 	outcome=("${PIPESTATUS[@]}")
@@ -1051,7 +1120,7 @@ post_command() {
 	fi
 }
 #######################################################################################################################################################
-# Multi Arch
+# This function handles the Multi Arch dynamics of the script.
 #######################################################################################################################################################
 _multi_arch() {
 	if [[ "${qbt_cross_name}" =~ ^(x86_64|armhf|armv7|aarch64)$ ]]; then
@@ -1150,19 +1219,13 @@ _multi_arch() {
 
 			_fix_multiarch_static_links "${qbt_cross_host}"
 
-			multi_bison=("--host=${qbt_cross_host}") # ${multi_bison[@]}
-
-			multi_gawk=("--host=${qbt_cross_host}") # ${multi_gawk[@]}
-
-			multi_glibc=("--host=${qbt_cross_host}") # ${multi_glibc[@]}
-
-			multi_iconv=("--host=${qbt_cross_host}") # ${multi_iconv[@]}
-
+			multi_bison=("--host=${qbt_cross_host}")                                                # ${multi_bison[@]}
+			multi_gawk=("--host=${qbt_cross_host}")                                                 # ${multi_gawk[@]}
+			multi_glibc=("--host=${qbt_cross_host}")                                                # ${multi_glibc[@]}
+			multi_iconv=("--host=${qbt_cross_host}")                                                # ${multi_iconv[@]}
 			multi_icu=("--host=${qbt_cross_host}" "-with-cross-build=${qbt_install_dir}/icu/cross") # ${multi_icu[@]}
-
-			multi_openssl=("./Configure" "${qbt_cross_openssl}") # ${multi_openssl[@]}
-
-			multi_qtbase=("-xplatform" "${qbt_cross_qtbase}") # ${multi_qtbase[@]}
+			multi_openssl=("./Configure" "${qbt_cross_openssl}")                                    # ${multi_openssl[@]}
+			multi_qtbase=("-xplatform" "${qbt_cross_qtbase}")                                       # ${multi_qtbase[@]}
 
 			if [[ "${qbt_build_tool}" == 'cmake' ]]; then
 				multi_libtorrent=("-D CMAKE_CXX_COMPILER=${qbt_cross_host}-g++")        # ${multi_libtorrent[@]}
@@ -1171,8 +1234,7 @@ _multi_arch() {
 			else
 				b2_toolset="gcc-arm"
 				echo -e "using gcc : arm : ${qbt_cross_host}-g++ : <cflags>${optimize/*/$optimize }-std=${cxx_standard} <cxxflags>${optimize/*/$optimize }-std=${cxx_standard} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
-				multi_libtorrent=("toolset=${b2_toolset}") # ${multi_libtorrent[@]}
-				#
+				multi_libtorrent=("toolset=${b2_toolset}")     # ${multi_libtorrent[@]}
 				multi_qbittorrent=("--host=${qbt_cross_host}") # ${multi_qbittorrent[@]}
 			fi
 			return
@@ -1388,7 +1450,7 @@ _script_version() {
 	}
 
 	if [[ "$(semantic_version "${script_version}")" -lt "$(semantic_version "${script_version_remote}")" ]]; then
-		echo -e "${tn} ${tbk}${urc}${bkend} Script update available! Versions - ${cly}local:${clr}${script_version}${cend} ${cly}remote:${clg}${script_version_remote}${cend}"
+		echo -e "${tn} ${tbk}${urc}${cend} Script update available! Versions - ${cly}local:${clr}${script_version}${cend} ${cly}remote:${clg}${script_version_remote}${cend}"
 		echo -e "${tn} ${ugc} curl -sLo ~/qbittorrent-nox-static.sh https://git.io/qbstatic${cend}"
 	else
 		echo -e "${tn} ${ugc} Script version: ${clg}${script_version}${cend}"
@@ -2131,14 +2193,14 @@ if [[ "${!app_name_skip:-yes}" == 'no' ]] || [[ "${1}" == "${app_name}" ]]; then
 		_cd "${qbt_install_dir}/boost"
 	fi
 
-	if [[ "${qbt_build_tool}" != 'cmake' ]]; then
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]] || [[ "${qbt_build_tool}" != 'cmake' ]]; then
 		"${qbt_install_dir}/boost/bootstrap.sh" |& tee "${qbt_install_dir}/logs/${app_name}.log"
 		ln -s "${qbt_install_dir}/boost/boost" "${qbt_install_dir}/boost/include"
 	else
 		echo -e " ${uyc} Skipping b2 as we are using cmake"
 	fi
 
-	if [[ "${boost_url_status}" =~ (403|404) ]]; then
+	if [[ -n "${qbt_cache_dir}" && -d "${qbt_cache_dir}/${app_name}" ]] || [[ "${boost_url_status}" =~ (403|404) ]]; then
 		"${qbt_install_dir}/boost/b2" headers |& tee "${qbt_install_dir}/logs/${app_name}.log"
 	fi
 else
