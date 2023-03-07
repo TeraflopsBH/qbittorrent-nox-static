@@ -220,7 +220,7 @@ set_default_values() {
 			;;
 	esac
 
-	#
+	# If we are crossbuilding then bootstrap the crossbuild tools we ned for the target arch else set native arch and remove the debian crossbuild tools
 	if [[ ${qbt_cross_name} =~ ^(x86_64|armhf|armv7|aarch64)$ ]]; then
 		_multi_arch bootstrap
 	else
@@ -254,6 +254,7 @@ set_default_values() {
 		delete+=("icu")
 	fi
 
+	# Configure default dependencies and modules if cmake is not specificed
 	if [[ "${qbt_build_tool}" != 'cmake' ]]; then
 		delete+=("double_conversion")
 		delete_pkgs+=("unzip" "ttf-freefont" "graphviz" "cmake" "re2c")
@@ -264,13 +265,13 @@ set_default_values() {
 	# Set the working dir to our current location and all things well be relative to this location.
 	qbt_working_dir="$(pwd)"
 
-	# Used with echos. Use the qbt_working_dir variable but the $HOME path is replaced with a literal ~
+	# Used with printf. Use the qbt_working_dir variable but the $HOME path is replaced with a literal ~
 	qbt_working_dir_short="${qbt_working_dir/$HOME/\~}"
 
 	# Install relative to the script location.
 	qbt_install_dir="${qbt_working_dir}/qbt-build"
 
-	# Used with echos. Use the qbt_install_dir variable but the $HOME path is replaced with a literal ~
+	# Used with printf. Use the qbt_install_dir variable but the $HOME path is replaced with a literal ~
 	qbt_install_dir_short="${qbt_install_dir/$HOME/\~}"
 
 	# Get the local users $PATH before we isolate the script by setting HOME to the install dir in the set_build_directory function.
@@ -282,7 +283,7 @@ set_default_values() {
 check_dependencies() {
 	printf '\n%b\n\n' " ${ulbc} ${tb}Checking if required core dependencies are installed${cend}"
 
-	## remove packages in the delete_pkgs from the qbt_required_pkgs array
+	# remove packages in the delete_pkgs from the qbt_required_pkgs array
 	for target in "${delete_pkgs[@]}"; do
 		for i in "${!qbt_required_pkgs[@]}"; do
 			if [[ "${qbt_required_pkgs[i]}" == "${target}" ]]; then
@@ -291,6 +292,7 @@ check_dependencies() {
 		done
 	done
 
+	# This checks over the qbt_required_pkgs array for the OS specificed dependencies to see if they are installed
 	for pkg in "${qbt_required_pkgs[@]}"; do
 
 		if [[ "${what_id}" =~ ^(alpine)$ ]]; then
@@ -368,7 +370,7 @@ check_dependencies() {
 		fi
 	fi
 
-	# All checks passed echo
+	# All checks passed print
 	if [[ "${deps_installed}" != 'no' ]]; then
 		printf '\n%b\n' " ${ugc}${tb} All checks passed and core dependencies are installed, continuing to build${cend}"
 	fi
@@ -387,9 +389,7 @@ while (("${#}")); do
 				boost_version="${2}"
 				shift 2
 			else
-				echo
-				echo -e " ${ulrc} You must provide a valid arch option when using${cend} ${clb}-bv${cend}"
-				echo
+				printf '\n%b\n\n' " ${ulrc} You must provide a valid arch option when using${cend} ${clb}-bv${cend}"
 				exit 1
 			fi
 			shift
@@ -425,16 +425,12 @@ while (("${#}")); do
 				qbt_cross_name="${2}"
 				shift 2
 			else
-				echo
-				echo -e " ${ulrc} You must provide a valid arch option when using${cend} ${clb}-ma${cend}"
-				echo
-				echo -e " ${ulyc} armhf${cend}"
-				echo -e " ${ulyc} armv7${cend}"
-				echo -e " ${ulyc} aarch64${cend}"
-				echo -e " ${ulyc} x86_64${cend}"
-				echo
-				echo -e " ${ulgc} example usage:${clb} -ma aarch64${cend}"
-				echo
+				printf '\n%b\n' " ${ulrc} You must provide a valid arch option when using${cend} ${clb}-ma${cend}"
+				printf '\n%b\n' " ${ulbc} armhf${cend}"
+				printf '%b\n' " ${ulbc} armv7${cend}"
+				printf '%b\n' " ${ulbc} aarch64${cend}"
+				printf '%b\n' " ${ulbc} x86_64${cend}"
+				printf '\n%b\n\n' " ${ulgc} Example usage:${clb} -ma aarch64${cend}"
 				exit 1
 			fi
 			shift
@@ -448,57 +444,42 @@ while (("${#}")); do
 			shift
 			;;
 		-h-bv | --help-boost-version)
-			echo
-			echo -e " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
-			echo
-			echo -e " This will let you set a specific version of boost to use with older build combos"
-			echo
-			echo -e " Example: ${clb}-bv 1.76.0${cend}"
-			echo
+			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
+			printf '\n%b\n' " This will let you set a specific version of boost to use with older build combos"
+			printf '\n%b\n\n' " ${ulbc} Usage example: ${clb}-bv 1.76.0${cend}"
 			exit
 			;;
 		-h-cd | --help-cache-directory)
 			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
 			printf '\n%b\n' " This will let you set a path of a directory that contains cached github repos of modules"
 			printf '\n%b\n' " ${uyc} Cached apps folder names must match the module name. Case and spelling"
-			printf '\n%b\n' "   For example: ${clc}~/cache_dir/qbittorrent${cend}"
-			printf '\n%b\n\n' " Example: ${clb}-cd ~/cache_dir${cend}"
+			printf '\n%b\n' " For example: ${clc}~/cache_dir/qbittorrent${cend}"
+			printf '\n%b\n\n' " ${ulbc} Usage example: ${clb}-cd ~/cache_dir${cend}"
 			exit
 			;;
 		-h-dma | --help-debian-mode-alternate)
 			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
 			printf '\n%b\n' " This modes builds the dependencies ${clm}gawk${cend} and ${clm}bison${cend} from source"
 			printf '\n%b\n' " In the standard mode they are installed via ${clm}apt-get${cend} as dependencies"
-			printf '\n%b\n\n' " Example: ${clb}-dma${cend}"
+			printf '\n%b\n\n' " ${ulbc} Usage example: ${clb}-dma${cend}"
 			exit
 			;;
 		-h-o | --help-optimize)
-			echo
-			echo -e " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
-			echo
-			echo -e " ${cly}Warning, using this flag will mean your static build is limited to a matching CPU${cend}"
-			echo
-			echo -e " Example: ${clb}-o${cend}"
-			echo
-			echo -e " Additonal flags used: ${clc}-march=native${cend}"
-			echo
+			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
+			printf '\n%b\n' " ${uyc} ${cly}Warning:${cend} using this flag will mean your static build is limited a CPU that matches the host spec"
+			printf '\n%b\n' " ${ulbc} Usage example: ${clb}-o${cend}"
+			printf '\n%b\n\n' " Additonal flags used: ${clc}-march=native${cend}"
 			exit
 			;;
 		-h-p | --help-proxy)
-			echo
-			echo -e " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
-			echo
-			echo -e " Specify a proxy URL and PORT to use with curl and git"
-			echo
-			echo -e " ${td}Example:${cend} ${td}${clb}-p${cend} ${td}${clc}username:password@https://123.456.789.321:8443${cend}"
-			echo
-			echo -e " ${td}${clb}-p${cend} ${td}${clc}https://proxy.com:12345${cend}"
-			echo
-			echo -e " ${cy}You can use this flag with this help command to see the value if called before the help option:${cend}"
-			echo
-			echo -e " ${td}${clb}-p${cend} ${td}${clc}https://proxy.com:12345${cend} ${td}${clb}-h-p${cend}"
-			echo
-			[[ -n "${qbt_curl_proxy}" ]] && echo -e " proxy command: ${clc}${qbt_curl_proxy}${tn}${cend}"
+			printf '\n%b\n' " ${ulcc} ${tb}${tu}Here is the help description for this flag:${cend}"
+			printf '\n%b\n' " Specify a proxy URL and PORT to use with curl and git"
+			printf '\n%b\n' " ${ulbc} Usage examples:"
+			printf '\n%b\n' " ${clb}-p${cend} ${clc}username:password@https://123.456.789.321:8443${cend}"
+			printf '\n%b\n' " ${clb}-p${cend} ${clc}https://proxy.com:12345${cend}"
+			printf '\n%b\n' " ${uyc} Call this before the help option to see outcome dynamically:"
+			printf '\n%b\n\n' " ${clb}-p${cend} ${clc}https://proxy.com:12345${cend} ${clb}-h-p${cend}"
+			[[ -n "${qbt_curl_proxy}" ]] && printf '%b\n' " proxy command: ${clc}${qbt_curl_proxy}${tn}${cend}"
 			exit
 			;;
 		--) # end argument parsing
@@ -528,7 +509,7 @@ curl_curl() {
 
 curl() {
 	if ! curl_curl "${@}"; then
-		echo 'error_url'
+		printf '%b\n' 'error_url'
 	fi
 }
 #######################################################################################################################################################
@@ -552,26 +533,22 @@ git() {
 	fi
 
 	if ! curl -I "${url_test%\.git}" &> /dev/null; then
-		echo
-		echo -e " ${cy}There is an issue with your proxy settings or network connection${cend}"
-		echo
+		printf '\n%b\n\n' " ${cy}There is an issue with your proxy settings or network connection${cend}"
 		exit
 	fi
 
 	status="$(
 		git_git ls-remote --exit-code "${url_test}" "${tag_flag}" "${tag_test}" &> /dev/null
-		echo "${?}"
+		printf '%b\n' "${?}"
 	)"
 
 	if [[ "${tag_flag}" == '-t' && "${status}" == '0' ]]; then
-		echo "${tag_test}"
+		printf '%b\n' "${tag_test}"
 	elif [[ "${tag_flag}" == '-t' && "${status}" -ge '1' ]]; then
-		echo 'error_tag'
+		printf '%b\n' 'error_tag'
 	else
 		if ! git_git "${@}"; then
-			echo
-			echo -e " ${cy}There is an issue with your proxy settings or network connection${cend}"
-			echo
+			printf '\n%b\n\n' " ${cy}There is an issue with your proxy settings or network connection${cend}"
 			exit
 		fi
 	fi
@@ -579,7 +556,7 @@ git() {
 
 test_git_ouput() {
 	if [[ "${1}" == 'error_tag' ]]; then
-		echo -e "${tn}${cy} Sorry, the provided ${3} tag ${cr}$2${cend}${cy} is not valid${cend}"
+		printf '\n%b\n' "${cy} Sorry, the provided ${3} tag ${cr}$2${cend}${cy} is not valid${cend}"
 	fi
 }
 #######################################################################################################################################################
@@ -823,17 +800,17 @@ _installation_modules() {
 		python_short_version="${python_major}.${python_minor}"
 		python_link_version="${python_major}${python_minor}"
 
-		echo -e "using gcc : : : <cflags>${optimize/*/$optimize }-std=${cxx_standard} <cxxflags>${optimize/*/$optimize }-std=${cxx_standard} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
+		printf '%b\n' "using gcc : : : <cflags>${optimize/*/$optimize }-std=${cxx_standard} <cxxflags>${optimize/*/$optimize }-std=${cxx_standard} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
 
 		# Echo the build directory.
-		echo -e "${tn} ${uyc}${tb} Install Prefix${cend} : ${clc}${qbt_install_dir_short}${cend}"
+		printf '\n%b\n' " ${uyc}${tb} Install Prefix${cend} : ${clc}${qbt_install_dir_short}${cend}"
 
 		# Some basic help
-		echo -e "${tn} ${uyc}${tb} Script help${cend} : ${clc}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${clb}-h${cend}"
+		printf '\n%b\n' " ${uyc}${tb} Script help${cend} : ${clc}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${clb}-h${cend}"
 	else
-		echo -e "${tn} ${tbk}${urc}${cend}${tb} One or more of the provided modules are not supported${cend}"
-		echo -e "${tn} ${uyc}${tb} Below is a list of supported modules${cend}"
-		echo -e "${tn} ${umc}${clm} ${qbt_modules[*]}${cend}"
+		printf '\n%b\n' " ${tbk}${urc}${cend}${tb} One or more of the provided modules are not supported${cend}"
+		printf '\n%b\n' " ${uyc}${tb} Below is a list of supported modules${cend}"
+		printf '\n%b\n' " ${umc}${clm} ${qbt_modules[*]}${cend}"
 
 		_print_env
 
@@ -1637,13 +1614,13 @@ while (("${#}")); do
 			echo
 			echo -e " ${cy}Paths are relative to the script location. I recommend that you use a full path.${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}all${cend} ${td}- Will install all modules and build libtorrent to the default build location${cend}"
+			echo -e " ${td}${ulbc} Usage example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}all${cend} ${td}- Will install all modules and build libtorrent to the default build location${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}all ${clb}-b${cend} ${td}${clc}\"\$HOME/build\"${cend} ${td}- Will specify a build directory and install all modules to that custom location${cend}"
+			echo -e " ${td}${ulbc} Usage example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}all ${clb}-b${cend} ${td}${clc}\"\$HOME/build\"${cend} ${td}- Will specify a build directory and install all modules to that custom location${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}module${cend} ${td}- Will install a single module to the default build location${cend}"
+			echo -e " ${td}${ulbc} Usage example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}module${cend} ${td}- Will install a single module to the default build location${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}module${cend} ${clb}-b${cend} ${td}${clc}\"\$HOME/build\"${cend} ${td}- will specify a custom build directory and install a specific module use to that custom location${cend}"
+			echo -e " ${td}${ulbc} Usage example:${cend} ${td}${cg}${qbt_working_dir_short}/$(basename -- "$0")${cend} ${td}${clm}module${cend} ${clb}-b${cend} ${td}${clc}\"\$HOME/build\"${cend} ${td}- will specify a custom build directory and install a specific module use to that custom location${cend}"
 			#
 			echo
 			exit
@@ -1845,7 +1822,7 @@ while (("${#}")); do
 			echo
 			echo -e " Specify a username and repo to use patches hosted on github${cend}"
 			echo
-			echo -e " ${cg}Example:${cend} ${clb}-pr${cend} ${clc}usnerame/repo${cend}"
+			echo -e " ${cg}${ulbc} Usage example:${cend} ${clb}-pr${cend} ${clc}usnerame/repo${cend}"
 			echo
 			echo -e " ${cy}There is a specific github directory format you need to use with this flag${cend}"
 			echo
