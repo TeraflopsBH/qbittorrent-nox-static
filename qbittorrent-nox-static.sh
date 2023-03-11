@@ -1605,10 +1605,12 @@ while (("${#}")); do
 		-m | --master)
 			github_tag[libtorrent]="$(git "${github_url[libtorrent]}" -t "RC_${qbt_libtorrent_version//./_}")"
 			app_version[libtorrent]="${github_tag[libtorrent]#v}"
+			source_archive_url[libtorrent]="https://github.com/arvidn/libtorrent/archive/refs/heads/${github_tag[libtorrent]}.tar.gz"
 			qbt_workflow_override[libtorrent]="yes"
 			_test_git_ouput "${github_tag[libtorrent]}" "libtorrent" "RC_${qbt_libtorrent_version//./_}"
 			github_tag[qbittorrent]="$(git "${github_url[qbittorrent]}" -t "master")"
 			app_version[qbittorrent]="${github_tag[qbittorrent]#release-}"
+			source_archive_url[qbittorrent]="https://github.com/qbittorrent/qBittorrent/archive/refs/heads/${github_tag[qbittorrent]}.tar.gz"
 			qbt_workflow_override[qbittorrent]="yes"
 			_test_git_ouput "${github_tag[qbittorrent]}" "qbittorrent" "master"
 			shift
@@ -1616,6 +1618,7 @@ while (("${#}")); do
 		-lm | --libtorrent-master)
 			github_tag[libtorrent]="$(git "${github_url[libtorrent]}" -t "RC_${qbt_libtorrent_version//./_}")"
 			app_version[libtorrent]="${github_tag[libtorrent]#v}"
+			source_archive_url[qbittorrent]="https://github.com/arvidn/libtorrent/archive/refs/heads/${github_tag[libtorrent]}.tar.gz"
 			qbt_workflow_override[libtorrent]="yes"
 			_test_git_ouput "${github_tag[libtorrent]}" "libtorrent" "RC_${qbt_libtorrent_version//./_}"
 			shift
@@ -1623,6 +1626,7 @@ while (("${#}")); do
 		-lt | --libtorrent-tag)
 			github_tag[libtorrent]="$(git "${github_url[libtorrent]}" -t "$2")"
 			app_version[libtorrent]="${github_tag[libtorrent]#v}"
+			source_archive_url[libtorrent]="https://github.com/arvidn/libtorrent/releases/download/${github_tag[libtorrent]}/libtorrent-rasterbar-${github_tag[libtorrent]#v}.tar.gz"
 			qbt_workflow_override[libtorrent]="yes"
 			_test_git_ouput "${github_tag[libtorrent]}" "libtorrent" "$2"
 			shift 2
@@ -1642,12 +1646,14 @@ while (("${#}")); do
 			github_tag[qbittorrent]="$(git "${github_url[qbittorrent]}" -t "master")"
 			app_version[qbittorrent]="${github_tag[qbittorrent]#release-}"
 			qbt_workflow_override[qbittorrent]="yes"
+			source_archive_url[qbittorrent]="https://github.com/qbittorrent/qBittorrent/archive/refs/heads/${github_tag[qbittorrent]}.tar.gz"
 			_test_git_ouput "${github_tag[qbittorrent]}" "qbittorrent" "master"
 			shift
 			;;
 		-qt | --qbittorrent-tag)
 			github_tag[qbittorrent]="$(git "${github_url[qbittorrent]}" -t "$2")"
 			app_version[qbittorrent]="${github_tag[qbittorrent]#release-}"
+			source_archive_url[qbittorrent]="https://github.com/qbittorrent/qBittorrent/archive/refs/tags/${github_tag[qbittorrent]}.tar.gz"
 			qbt_workflow_override[qbittorrent]="yes"
 			_test_git_ouput "${github_tag[qbittorrent]}" "qbittorrent" "$2"
 			shift 2
