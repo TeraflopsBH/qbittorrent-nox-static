@@ -1,5 +1,13 @@
 v1.0.6 - 07-03-2023
 
+	Lot of tweaks and changes.
+
+	cache files method is now integrated into the script as a result of the URL function changes.
+
+	Refactored URL function. It now uses associative arrays to hold the data for URLs, tags and versions. This makes the data more structured and easier to use consistently throughout the script.
+
+	Changed all instances of echo -e to printf %b
+
 	Added a method to using an existing local git repo as a cached source. It will clone a folder with the matching app name in the cache path provided and clone, if it exists.
 
 	It will respect manually specified tags and checkout those from the clone folders.
@@ -7,6 +15,7 @@ v1.0.6 - 07-03-2023
 	The lowercase naming convention of the applications must be used in the cache_path/folder_name like cache_path/qbittorrent
 
 	It must be a git repo
+
 
 v1.0.5 - 06-03-2023
 
